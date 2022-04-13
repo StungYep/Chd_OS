@@ -46,7 +46,7 @@ void HariMain(void)
 
 	int key_shift = 0, key_leds = (binfo->leds >> 4) & 7, keycmd_wait = -1;
 	int j, x, y, mmx = -1, mmy = -1, mmx2 = 0;
-	struct SHEET *sht = 0, *key_win, *sht2, *sht_info;      
+	struct SHEET *sht = 0, *key_win, *sht2, *sht_info = NULL;      
 	int *fat;
 	unsigned char *nihongo;
 	struct FILEINFO *finfo;
@@ -84,7 +84,7 @@ void HariMain(void)
 	init_screen8(buf_back, binfo->scrnx, binfo->scrny);
 
 	/* sht_cons */
-	key_win = open_console(shtctl, memtotal);
+	key_win = open_console(shtctl, sht_info, memtotal);
 
 	/* sht_mouse */
 	sht_mouse = sheet_alloc(shtctl);
@@ -94,7 +94,7 @@ void HariMain(void)
 	my = (binfo->scrny - 28 - 16) / 2;
 
 	/* sht_infomation */
-	sht_info = open_shtinfo(shtctl, memtotal);
+	sht_info = open_shtinfo(shtctl, sht_info, memtotal);
 
 	// 固定已有窗口的位置
 	sheet_slide(sht_back,  0,  0);
@@ -363,11 +363,11 @@ void keywin_on(struct SHEET *key_win)
 	return;
 }
 
-struct TASK *open_constask(struct SHEET *sht, unsigned int memtotal)
+struct TASK *open_constask(struct SHEET *sht, struct SHEET *sht_info, unsigned int memtotal)
 {
 	struct MEMMAN *memman = (struct MEMMAN *) MEMMAN_ADDR;
 	struct TASK *task = task_alloc();
-	int *cons_fifo = (int *) memman_alloc_4k(memman, 128 * 4);
+	int *cons_fifo = (int *) memman_alloc_4k(sht_info, memman, 128 * 4);
 	task->cons_stack = memman_alloc_4k(memman, 64 * 1024);
 	task->tss.esp = task->cons_stack + 64 * 1024 - 12;
 	task->tss.eip = (int) &console_task;
@@ -378,13 +378,14 @@ struct TASK *open_constask(struct SHEET *sht, unsigned int memtotal)
 	task->tss.fs = 1 * 8;
 	task->tss.gs = 1 * 8;
 	*((int *) (task->tss.esp + 4)) = (int) sht;
-	*((int *) (task->tss.esp + 8)) = memtotal;
+	*((int *) (task->tss.esp + 8)) = (int) sht_info;
+	*((int *) (task->tss.esp + 12)) = memtotal;
 	task_run(task, 2, 2); /* level=2, priority=2 */
 	fifo32_init(&task->fifo, 128, cons_fifo, task);
 	return task;
 }
 
-struct SHEET *open_console(struct SHTCTL *shtctl, unsigned int memtotal)
+struct SHEET *open_console(struct SHTCTL *shtctl, struct SHEET *sht_info, unsigned int memtotal)
 {
 	struct MEMMAN *memman = (struct MEMMAN *) MEMMAN_ADDR;
 	struct SHEET *sht = sheet_alloc(shtctl);
@@ -392,12 +393,12 @@ struct SHEET *open_console(struct SHTCTL *shtctl, unsigned int memtotal)
 	sheet_setbuf(sht, buf, 512, 330, -1); /*无透明色*/
 	make_window8(buf, 512, 330, "console", 0);
 	make_textbox8(sht, 8, 28, 496, 302, COL8_000000);
-	sht->task = open_constask(sht, memtotal);
+	sht->task = open_constask(sht, sht_info, memtotal);
 	sht->flags |= 0x20;	/*有光标*/
 	return sht;
 }
 
-struct SHEET *open_shtinfo(struct SHTCTL *shtctl, unsigned int memtotal)
+struct SHEET *open_shtinfo(struct SHTCTL *shtctl, struct SHEET *sht_info, unsigned int memtotal)
 {
 	struct MEMMAN *memman = (struct MEMMAN *) MEMMAN_ADDR;
 	struct SHEET *sht = sheet_alloc(shtctl);
@@ -405,7 +406,7 @@ struct SHEET *open_shtinfo(struct SHTCTL *shtctl, unsigned int memtotal)
 	sheet_setbuf(sht, buf, 512, 330, -1); /*无透明色*/
 	make_window8(buf, 512, 330, "infomation", 0);
 	make_textbox8(sht, 8, 28, 496, 302, COL8_000000);
-	sht->task = open_constask(sht, memtotal);
+	sht->task = open_constask(sht, sht_info, memtotal);
 	return sht;
 }
 
